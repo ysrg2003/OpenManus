@@ -40,10 +40,9 @@ jobs:
     - name: Create config.toml
       run: |
         mkdir -p config
-        # Use a simpler way to create config.toml to avoid sed issues with complex URLs
         cat <<EOF > config/config.toml
         [llm]
-        model = "gemini-2.0-flash-exp"
+        model = "gemini-2.0-flash"
         base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
         api_key = "${{ secrets.GEMINI_API_KEY }}"
         max_tokens = 4096
@@ -51,9 +50,12 @@ jobs:
         api_type = "openai"
 
         [llm.vision]
-        model = "gemini-2.0-flash-exp"
+        model = "gemini-2.0-flash"
         base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
         api_key = "${{ secrets.GEMINI_API_KEY }}"
+
+        [daytona]
+        daytona_api_key = "dummy_key"
         EOF
 
     - name: Run OpenManus agent
