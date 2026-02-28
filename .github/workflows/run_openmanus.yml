@@ -22,29 +22,39 @@ jobs:
         python-version: '3.12'
 
     - name: Install uv
-      run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
     - name: Install dependencies
       run: |
-        ~/.cargo/bin/uv venv
+        uv venv
         source .venv/bin/activate
-        ~/.cargo/bin/uv pip install -r requirements.txt
+        uv pip install -r requirements.txt
 
     - name: Install Playwright browsers
       run: | 
         source .venv/bin/activate
-        playwright install
+        playwright install chromium
 
     - name: Create config.toml
       run: |
         mkdir -p config
-        cp config/config.example.toml config/config.toml
-        # Replace placeholder API key with GitHub Secret for Gemini
-        sed -i 's/YOUR_API_KEY/${{ secrets.GEMINI_API_KEY }}/g' config/config.toml
-        # Set model to gemini-2.5-flash and update base_url and api_type
-        sed -i 's/model = "claude-3-7-sonnet-20250219"/model = "gemini-2.5-flash"/g' config/config.toml
-        sed -i 's/base_url = "https:\/\/api.anthropic.com\/v1\/"/base_url = "https:\/\/generativelanguage.googleapis.com\/v1beta"/g' config/config.toml
-        sed -i 's/api_type = ""/api_type = "google"/g' config/config.toml
+        # Use a simpler way to create config.toml to avoid sed issues with complex URLs
+        cat <<EOF > config/config.toml
+        [llm]
+        model = "gemini-2.0-flash-exp"
+        base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+        api_key = "${{ secrets.GEMINI_API_KEY }}"
+        max_tokens = 4096
+        temperature = 0.0
+        api_type = "openai"
+
+        [llm.vision]
+        model = "gemini-2.0-flash-exp"
+        base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+        api_key = "${{ secrets.GEMINI_API_KEY }}"
+        EOF
 
     - name: Run OpenManus agent
       run: |
