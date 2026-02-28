@@ -18,31 +18,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360
 
-    # ✅ IMPORTANT — expose secrets BEFORE python starts
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # ✅ Setup Python + Cache
-      - name: Setup Python
+      - name: Setup Python + Cache
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
 
-      # ✅ Install dependencies cleanly
-      - name: Install dependencies
+      - name: Install system deps + dependencies
         run: |
           set -e
           python -m pip install --upgrade pip
           sudo apt-get update -y
           sudo apt-get install -y build-essential libjpeg-dev zlib1g-dev libpng-dev
 
-          # Force pillow version compatible with crawl4ai
+          # force pillow 10.4 for crawl4ai
           echo "pillow==10.4.0" > constraints.txt
 
           if [ -f requirements.txt ]; then
@@ -52,47 +48,66 @@ jobs:
 
           pip install -U google-genai
 
-      # ✅ Create config file (Gemini 2.5 Flash)
-      - name: Create config/config.toml
+      - name: Create config/config.toml (Gemini + disable Daytona)
         env:
           GEMINI_MODEL_INPUT: ${{ github.event.inputs.gemini_model }}
         run: |
           MODEL="${GEMINI_MODEL_INPUT:-gemini-2.5-flash}"
-
           mkdir -p config
 
           cat > config/config.toml <<EOF
-          [llm]
-          provider = "gemini"
-          model = "${MODEL}"
-          base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
-          api_key = "${GEMINI_API_KEY}"
-          temperature = 0.0
-          max_tokens = 8096
+[llm]
+provider = "gemini"
+model = "${MODEL}"
+base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+api_key = "${GEMINI_API_KEY}"
+temperature = 0.0
+max_tokens = 8096
 
-          [llm.vision]
-          model = "gemini-2.5-flash"
-          base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
-          api_key = "${GEMINI_API_KEY}"
-          max_tokens = 8192
-          temperature = 0.0
-          EOF
+[llm.vision]
+model = "gemini-2.5-flash-image"
+base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+api_key = "${GEMINI_API_KEY}"
+max_tokens = 8192
+temperature = 0.0
 
-          echo "Config created using model: ${MODEL}"
+[daytona]
+enabled = false
+api_key = ""
+EOF
 
-      # ✅ Run OpenManus
+          echo "config/config.toml created (model=${MODEL})"
+          sed -n '1,50p' config/config.toml | sed -E 's/(api_key = )".*"/\1"<redacted>"/g' || true
+
       - name: Run OpenManus
+        continue-on-error: true
         run: |
           PROMPT="${{ github.event.inputs.prompt || '' }}"
           echo "Prompt length: ${#PROMPT}"
 
           if [ -f main.py ]; then
             python main.py --once --prompt "$PROMPT" || python main.py <<< "$PROMPT"
+          elif [ -f run_flow.py ]; then
+            python run_flow.py --once --prompt "$PROMPT" || python run_flow.py <<< "$PROMPT"
+          elif [ -f run_mcp.py ]; then
+            python run_mcp.py --once --prompt "$PROMPT" || python run_mcp.py <<< "$PROMPT"
           else
-            echo "main.py not found"
+            echo "No recognized entrypoint found (main.py/run_flow.py/run_mcp.py)"
+            exit 0
           fi
 
-      # ✅ Upload artifacts
+      - name: Collect debug info if failed
+        if: failure()
+        run: |
+          echo "=== Python version ==="
+          python -V || true
+          echo "=== Pip freeze ==="
+          pip freeze || true
+          echo "=== Disk usage ==="
+          df -h || true
+          echo "=== Repo files ==="
+          ls -la || true
+
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
