@@ -39,12 +39,12 @@ jobs:
       run: |
         mkdir -p config
         cp config/config.example.toml config/config.toml
-        # Replace placeholder API key with GitHub Secret
-        sed -i 's/YOUR_API_KEY/${{ secrets.OPENAI_API_KEY }}/g' config/config.toml
-        # Set model to gpt-4o if not already set, or ensure a valid model is used
-        sed -i 's/model = "claude-3-7-sonnet-20250219"/model = "gpt-4o"/g' config/config.toml
-        sed -i 's/base_url = "https:\/\/api.anthropic.com\/v1\/"/base_url = "https:\/\/api.openai.com\/v1"/g' config/config.toml
-        sed -i 's/api_type = ""/api_type = "openai"/g' config/config.toml
+        # Replace placeholder API key with GitHub Secret for Gemini
+        sed -i 's/YOUR_API_KEY/${{ secrets.GEMINI_API_KEY }}/g' config/config.toml
+        # Set model to gemini-2.5-flash and update base_url and api_type
+        sed -i 's/model = "claude-3-7-sonnet-20250219"/model = "gemini-2.5-flash"/g' config/config.toml
+        sed -i 's/base_url = "https:\/\/api.anthropic.com\/v1\/"/base_url = "https:\/\/generativelanguage.googleapis.com\/v1beta"/g' config/config.toml
+        sed -i 's/api_type = ""/api_type = "google"/g' config/config.toml
 
     - name: Run OpenManus agent
       run: |
