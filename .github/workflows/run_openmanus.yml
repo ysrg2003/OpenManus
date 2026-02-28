@@ -63,7 +63,7 @@ jobs:
         mkdir -p config
         cat <<EOF > config/config.toml
         [llm]
-        model = "gemini-2.0-flash"
+        model = "gemini-2.5-flash"
         base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
         api_key = "${{ secrets.GEMINI_API_KEY }}"
         max_tokens = 4096
@@ -71,7 +71,7 @@ jobs:
         api_type = "openai"
 
         [llm.vision]
-        model = "gemini-2.0-flash"
+        model = "gemini-2.5-flash"
         base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
         api_key = "${{ secrets.GEMINI_API_KEY }}"
 
