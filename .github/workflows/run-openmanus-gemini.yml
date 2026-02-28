@@ -1,5 +1,6 @@
 name: Run OpenManus (manual) — Gemini
 
+# يدويًا يمكن تشغيله من واجهة GitHub
 on:
   workflow_dispatch:
     inputs:
@@ -16,7 +17,7 @@ permissions:
 jobs:
   run-openmanus:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 360  # GitHub-hosted runners max = 6 hours
 
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -46,6 +47,7 @@ jobs:
             pip install -r req.txt -c constraints.txt
           fi
 
+          # تثبيت google-genai للاتصال بـ Gemini
           pip install -U google-genai
 
       - name: Create config/config.toml (Gemini + disable Daytona)
@@ -54,7 +56,6 @@ jobs:
         run: |
           MODEL="${GEMINI_MODEL_INPUT:-gemini-2.5-flash}"
           mkdir -p config
-
           cat > config/config.toml <<EOF
 [llm]
 provider = "gemini"
@@ -94,7 +95,6 @@ EOF
           else
             echo "No recognized entrypoint found (main.py/run_flow.py/run_mcp.py)"
             exit 0
-          fi
 
       - name: Collect debug info if failed
         if: failure()
