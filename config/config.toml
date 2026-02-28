@@ -1,0 +1,16 @@
+# Global LLM configuration
+[llm]
+provider = "gemini"                                              # optional tag for clarity
+model = "gemini-2.5-flash"                                       # The LLM model to use
+base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"   # API endpoint (OpenAI-compatibility path)
+api_key = "${GEMINI_API_KEY}"                                    # will be injected from GitHub Secrets at runtime
+temperature = 0.0                                                # Controls randomness
+max_tokens = 8096                                                # Maximum number of tokens in the response
+
+# Optional configuration for Google vision / multimodal models
+[llm.vision]
+model = "gemini-2.5-flash-image"                                 # Vision / multimodal model variant
+base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"  # API endpoint for vision model
+api_key = "${GEMINI_API_KEY}"                                    # reuse same secret (or set GEMINI_VISION_KEY)
+max_tokens = 8192                                                 # Max tokens for vision responses
+temperature = 0.0                                                 # Controls randomness for vision model
