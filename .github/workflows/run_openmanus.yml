@@ -1,0 +1,52 @@
+name: Run OpenManus
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'The prompt for the OpenManus agent'
+        required: true
+        default: 'What is the capital of France?'
+
+jobs:
+  run-agent:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install uv
+      run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+    - name: Install dependencies
+      run: |
+        ~/.cargo/bin/uv venv
+        source .venv/bin/activate
+        ~/.cargo/bin/uv pip install -r requirements.txt
+
+    - name: Install Playwright browsers
+      run: | 
+        source .venv/bin/activate
+        playwright install
+
+    - name: Create config.toml
+      run: |
+        mkdir -p config
+        cp config/config.example.toml config/config.toml
+        # Replace placeholder API key with GitHub Secret
+        sed -i 's/YOUR_API_KEY/${{ secrets.OPENAI_API_KEY }}/g' config/config.toml
+        # Set model to gpt-4o if not already set, or ensure a valid model is used
+        sed -i 's/model = "claude-3-7-sonnet-20250219"/model = "gpt-4o"/g' config/config.toml
+        sed -i 's/base_url = "https:\/\/api.anthropic.com\/v1\/"/base_url = "https:\/\/api.openai.com\/v1"/g' config/config.toml
+        sed -i 's/api_type = ""/api_type = "openai"/g' config/config.toml
+
+    - name: Run OpenManus agent
+      run: |
+        source .venv/bin/activate
+        python main.py --prompt "${{ github.event.inputs.prompt }}"
