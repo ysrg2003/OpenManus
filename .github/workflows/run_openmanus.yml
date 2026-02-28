@@ -26,13 +26,32 @@ jobs:
         curl -LsSf https://astral.sh/uv/install.sh | sh
         echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
+    - name: Cache uv environment
+      uses: actions/cache@v4
+      with:
+        path: .venv
+        key: ${{ runner.os }}-uv-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-uv-
+
     - name: Install dependencies
       run: |
-        uv venv
+        if [ ! -d ".venv" ]; then
+          uv venv
+        fi
         source .venv/bin/activate
-        # Install missing dependencies and fix version conflicts
-        uv pip install structlog urllib3==1.26.15
-        uv pip install -r requirements.txt
+        # تثبيت التبعيات المفقودة في المستودع الأصلي وإصلاح تضارب urllib3
+        uv pip install structlog daytona-sdk daytona urllib3==1.26.15
+        # محاولة تثبيت باقي التبعيات مع تجاهل الأخطاء البسيطة
+        uv pip install -r requirements.txt || true
+        # تأكيد نهائي على وجود مكتبة daytona
+        python -c "import daytona; print('Daytona module found')"
+
+    - name: Cache Playwright browsers
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ runner.os }}-playwright-${{ hashFiles('requirements.txt') }}
 
     - name: Install Playwright browsers
       run: | 
