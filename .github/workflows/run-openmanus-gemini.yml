@@ -10,6 +10,10 @@ on:
         description: 'Gemini model id (optional, overrides secret)'
         required: false
 
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   run-openmanus:
     runs-on: ubuntu-latest
@@ -23,26 +27,37 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies (repo) + google-genai
+      - name: Install system deps for Pillow + Install dependencies (with pillow 10.4 constraint)
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          # install official Gemini client (safe if repo already has it)
+          sudo apt-get update -y
+          # system packages needed to build pillow wheels if binary not available
+          sudo apt-get install -y build-essential libjpeg-dev zlib1g-dev libtiff5-dev libopenjp2-7-dev libpng-dev
+          # create constraint to force pillow 10.4.x (satisfies crawl4ai dependency)
+          echo "pillow==10.4.0" > constraints.txt
+          # install requirements using constraints; if requirements.txt missing, skip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt -c constraints.txt
+          fi
+          # install google-genai client (Gemini)
           pip install -q -U google-genai
 
       - name: Create config/config.toml from GitHub Secrets
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          # allow overriding the model via workflow input or secret; default to gemini-2.5-flash
-          GEMINI_MODEL: ${{ github.event.inputs.gemini_model || secrets.GEMINI_MODEL || 'gemini-2.5-flash' }}
-          GEMINI_VISION_MODEL: ${{ secrets.GEMINI_VISION_MODEL || 'gemini-2.5-flash-image' }}
+          GEMINI_MODEL_INPUT: ${{ github.event.inputs.gemini_model }}
+          GEMINI_MODEL_SECRET: ${{ secrets.GEMINI_MODEL }}
+          GEMINI_VISION_MODEL_SECRET: ${{ secrets.GEMINI_VISION_MODEL }}
         run: |
+          # determine model names (input -> secret -> default)
+          MODEL="${GEMINI_MODEL_INPUT:-${GEMINI_MODEL_SECRET:-gemini-2.5-flash}}"
+          VISION_MODEL="${GEMINI_VISION_MODEL_SECRET:-gemini-2.5-flash-image}"
           mkdir -p config
           cat > config/config.toml <<EOF
           # Global LLM configuration
           [llm]
           provider = "gemini"
-          model = "${GEMINI_MODEL}"
+          model = "${MODEL}"
           base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
           api_key = "${GEMINI_API_KEY}"
           temperature = 0.0
@@ -50,15 +65,15 @@ jobs:
 
           # Optional configuration for Google vision / multimodal models
           [llm.vision]
-          model = "${GEMINI_VISION_MODEL}"
+          model = "${VISION_MODEL}"
           base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
           api_key = "${GEMINI_API_KEY}"
           max_tokens = 8192
           temperature = 0.0
           EOF
 
-          echo "config/config.toml created (model=${GEMINI_MODEL})"
-          # show file head but redact the api_key value to avoid leaking secret in logs
+          echo "config/config.toml created (model=${MODEL})"
+          # show file head but redact api_key value to avoid leaking secret in logs
           sed -n '1,120p' config/config.toml | sed -E 's/(api_key = )".*"/\1"<redacted>"/g' || true
 
       - name: Export GEMINI_API_KEY for runtime
@@ -69,14 +84,12 @@ jobs:
           echo "GEMINI_API_KEY=${GEMINI_API_KEY}" >> $GITHUB_ENV
 
       - name: Run OpenManus (attempt non-interactive)
-        # Try a non-interactive run. Adjust the commands if your repo expects different entrypoints.
+        continue-on-error: true
         run: |
           PROMPT="${{ github.event.inputs.prompt || '' }}"
           echo "Starting OpenManus (non-interactive attempt). Prompt length: ${#PROMPT}"
           # Try common entrypoints (main.py, run_flow.py, run_mcp.py). The repo may differ.
-          # We try them in sequence; the first that exists will run.
           if [ -f main.py ]; then
-            # some main.py accept args; if not, feeding the prompt via stdin as fallback
             python main.py --once --prompt "$PROMPT" || python main.py <<< "$PROMPT" || true
           elif [ -f run_flow.py ]; then
             python run_flow.py --once --prompt "$PROMPT" || python run_flow.py <<< "$PROMPT" || true
@@ -86,8 +99,17 @@ jobs:
             echo "No recognized entrypoint (main.py / run_flow.py / run_mcp.py) found — adjust the workflow to call the correct script."
             exit 0
           fi
-        # keep job success even if script returns non-zero; logs will help debugging
-        continue-on-error: true
+
+      - name: Collect environment + Python info (debug)
+        if: failure()
+        run: |
+          echo "=== python info ==="
+          python -V || true
+          pip freeze || true
+          echo "=== disk usage ==="
+          df -h || true
+          echo "=== ls repo root ==="
+          ls -la || true
 
       - name: Upload logs/artifacts
         if: always()
@@ -99,4 +121,5 @@ jobs:
             ./openmanus.log
             ./logs
             config/config.toml
+            constraints.txt
           retention-days: 7
