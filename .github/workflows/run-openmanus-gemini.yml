@@ -27,19 +27,56 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install system deps for Pillow + Install dependencies (with pillow 10.4 constraint)
+      - name: Install system deps for Pillow + Install dependencies (robust)
         run: |
+          set -euo pipefail
           python -m pip install --upgrade pip
           sudo apt-get update -y
-          # system packages needed to build pillow wheels if binary not available
+
+          # system packages needed to build pillow wheels if binary wheel not available
           sudo apt-get install -y build-essential libjpeg-dev zlib1g-dev libtiff5-dev libopenjp2-7-dev libpng-dev
-          # create constraint to force pillow 10.4.x (satisfies crawl4ai dependency)
+
+          # prepare constraint that forces pillow 10.4.x (satisfies crawl4ai dependency)
           echo "pillow==10.4.0" > constraints.txt
-          # install requirements using constraints; if requirements.txt missing, skip
+
           if [ -f requirements.txt ]; then
-            pip install -r requirements.txt -c constraints.txt
+            # backup original
+            cp requirements.txt requirements.txt.bak || true
+
+            # If requirements pins pillow (e.g. pillow~=11.1.0) remove that line so constraints can control it
+            if grep -i -E '^\s*pillow' requirements.txt >/dev/null 2>&1; then
+              echo "Detected top-level pillow pin in requirements.txt — removing it and letting constraints.txt force 10.4.x"
+              grep -vi -E '^\s*pillow' requirements.txt > requirements_no_pillow.txt || true
+            else
+              cp requirements.txt requirements_no_pillow.txt
+            fi
+
+            # First try: normal install with constraints (preferred)
+            echo "Attempting to install requirements with constraints (preferred)"
+            if pip install -r requirements_no_pillow.txt -c constraints.txt; then
+              echo "Installed requirements with pillow constrained to 10.4.x"
+            else
+              echo "::warning::Install with constraints failed — attempting fallback strategy"
+
+              # Fallback strategy:
+              # 1) Try to install crawl4ai without pulling its deps (avoid it forcing pillow 11.x)
+              # 2) Install the rest of requirements with constraints
+              # 3) Force-reinstall pillow 10.4.0
+              #
+              # WARNING: Using --no-deps can break runtime if crawl4ai needs other deps.
+              pip install --no-deps crawl4ai==0.6.3 || true
+
+              pip install -r requirements_no_pillow.txt -c constraints.txt || true
+
+              pip install --force-reinstall pillow==10.4.0 || true
+
+              echo "::warning::Fallback install finished — verify runtime behaviour (crawl4ai may require specific deps)."
+            fi
+          else
+            echo "No requirements.txt found — skipping requirements install"
           fi
-          # install google-genai client (Gemini)
+
+          # always ensure google-genai installed for Gemini quickcalls
           pip install -q -U google-genai
 
       - name: Create config/config.toml from GitHub Secrets
